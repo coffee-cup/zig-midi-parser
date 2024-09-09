@@ -15,6 +15,10 @@ pub const HeaderChunk = struct {
         multiple_songs = 2,
     };
 
+    pub fn len(_: HeaderChunk) usize {
+        return 14;
+    }
+
     pub fn parse(bytes: []const u8) !HeaderChunk {
         if (bytes.len < 14) return error.InsufficientData;
 
@@ -127,6 +131,20 @@ pub const MidiFile = struct {
         return MidiFile{ .header = header };
     }
 };
+
+test "header chunk" {
+    const testing = std.testing;
+
+    const header_bytes = [_]u8{ 0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x0E, 0x00, 0xC0 };
+    const header = try HeaderChunk.parse(&header_bytes);
+
+    try testing.expectEqualStrings(&header.magic, "MThd");
+    try testing.expectEqual(@as(u32, 6), header.length);
+    try testing.expectEqual(HeaderChunk.Format.multiple_tracks, header.format);
+    try testing.expectEqual(@as(u16, 14), header.num_tracks);
+    try testing.expectEqual(@as(u16, 192), header.division);
+    try testing.expectEqual(14, header.len());
+}
 
 test {
     @import("std").testing.refAllDecls(@This());
