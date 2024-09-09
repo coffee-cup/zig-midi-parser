@@ -14,6 +14,7 @@ pub const MidiEvent = union(enum) {
     channel_aftertouch: struct { channel: u8, pressure: u8 },
     pitch_wheel_change: struct { channel: u8, value: u16 },
     meta_event: MetaEvent,
+    sysex_event: SysExEvent,
 
     pub fn len(self: MidiEvent) usize {
         return switch (self) {
@@ -25,6 +26,7 @@ pub const MidiEvent = union(enum) {
             .channel_aftertouch => 2,
             .pitch_wheel_change => 3,
             .meta_event => |meta_event| meta_event.len(),
+            .sysex_event => |sysex_event| sysex_event.len(),
         };
     }
 
@@ -78,6 +80,7 @@ pub const MidiEvent = union(enum) {
 
         switch (status) {
             0xFF => return .{ .meta_event = try MetaEvent.parse(bytes) },
+            0xF0 => return .{ .sysex_event = try SysExEvent.parse(bytes) },
 
             else => return error.Unimplemented,
         }
@@ -211,6 +214,26 @@ pub const MetaEvent = union(enum) {
         const text_length = bytes[2];
         const text = bytes[3 .. 3 + text_length];
         return text;
+    }
+};
+
+pub const SysExEvent = union(enum) {
+    normal: struct { data: []const u8 },
+    // TODO: support divided sysex events
+
+    pub fn len(self: SysExEvent) usize {
+        return switch (self) {
+            .normal => |s| s.data.len + 2,
+        };
+    }
+
+    pub fn parse(bytes: []const u8) !SysExEvent {
+        const data_length = try utils.readVariableLengthQuantity(bytes[1..]);
+        const data = bytes[2 .. 2 + data_length];
+
+        // TODO: Validate the last byte is 0xF7
+
+        return .{ .normal = .{ .data = data } };
     }
 };
 
@@ -390,5 +413,18 @@ test "midi meta events" {
 
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .sequencer_specific = .{ .data = &[_]u8{ 0x00, 0x00, 0x00, 0x00 } } } }, message);
         try testing.expectEqual(7, message.len());
+    }
+}
+
+test "midi sysex events" {
+    const testing = std.testing;
+
+    // Normal
+    {
+        const bytes = [_]u8{ 0xF0, 0x04, 0x00, 0x00, 0x00, 0x00, 0xFF };
+        const message = try MidiEvent.parse(&bytes);
+
+        try testing.expectEqualDeep(MidiEvent{ .sysex_event = .{ .normal = .{ .data = &[_]u8{ 0x00, 0x00, 0x00, 0x00 } } } }, message);
+        try testing.expectEqual(6, message.len());
     }
 }
