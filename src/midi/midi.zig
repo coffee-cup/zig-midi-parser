@@ -15,12 +15,15 @@ pub const HeaderChunk = struct {
         multiple_songs = 2,
     };
 
-    pub fn parse(reader: *const std.io.AnyReader) !HeaderChunk {
-        const magic = try reader.readBytesNoEof(4);
-        const length = try reader.readInt(u32, .big);
-        const format: Format = @enumFromInt(try reader.readInt(u16, .big));
-        const num_tracks = try reader.readInt(u16, .big);
-        const division = try reader.readInt(u16, .big);
+    pub fn parse(bytes: []const u8) !HeaderChunk {
+        if (bytes.len < 14) return error.InsufficientData;
+
+        const magic = bytes[0..4].*;
+
+        const length = std.mem.readVarInt(u32, bytes[4..8], .big);
+        const format: Format = @enumFromInt(std.mem.readVarInt(u16, bytes[8..10], .big));
+        const num_tracks = std.mem.readVarInt(u16, bytes[10..12], .big);
+        const division = std.mem.readVarInt(u16, bytes[12..14], .big);
 
         const header = HeaderChunk{
             .magic = magic,
@@ -59,9 +62,11 @@ pub const TrackChunk = struct {
     length: u32,
     // events: []TrackEvent,
 
-    pub fn parse(reader: *const std.io.AnyReader) !TrackChunk {
-        const magic = try reader.readBytesNoEof(4);
-        const length = try reader.readInt(u32, .big);
+    pub fn parse(bytes: []const u8) !TrackChunk {
+        if (bytes.len < 8) return error.InsufficientData;
+
+        const magic = bytes[0..4].*;
+        const length = std.mem.readIntBig(u32, bytes[4..8]);
 
         const track = TrackChunk{
             .magic = magic,
@@ -84,13 +89,11 @@ pub const TrackEvent = struct {
     delta_time: u32,
     // event: Event,
 
-    pub fn parse(reader: *const std.io.AnyReader) !TrackEvent {
-        const delta_time = try utils.readVariableLengthQuantity(reader);
-        const event = try reader.readByte();
+    pub fn parse(bytes: []const u8) !TrackEvent {
+        const delta_time = try utils.readVariableLengthQuantity(bytes);
 
         return TrackEvent{
             .delta_time = delta_time,
-            .event = event,
         };
     }
 };
@@ -104,14 +107,21 @@ pub const TrackEvent = struct {
 pub const MidiFile = struct {
     header: HeaderChunk,
 
-    pub fn parse(file: std.fs.File) !MidiFile {
-        var reader = file.reader().any();
+    pub fn parse(allocator: std.mem.Allocator, file: std.fs.File) !MidiFile {
+        // Buffer to hold the file contents
+        var buffer = std.ArrayList(u8).init(allocator);
+        defer buffer.deinit();
 
-        const header = try HeaderChunk.parse(&reader);
+        // Read the entire file into the buffer
+        try file.reader().readAllArrayList(&buffer, std.math.maxInt(usize));
+        const bytes = buffer.items;
+
+        // Parse the header chunk
+        const header = try HeaderChunk.parse(bytes);
         header.print();
 
-        const bytes = [_]u8{ 0x90, 0x3C, 0x7F };
-        const message = try midi_message.MidiEvent.parse(&bytes);
+        const event_bytes = [_]u8{ 0x90, 0x3C, 0x7F };
+        const message = try midi_message.MidiEvent.parse(&event_bytes);
         std.debug.print("MIDI Event: {}\n", .{message});
 
         return MidiFile{ .header = header };

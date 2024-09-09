@@ -1,13 +1,18 @@
 const std = @import("std");
 
-pub fn readVariableLengthQuantity(reader: *const std.io.AnyReader) !u32 {
+pub fn readVariableLengthQuantity(bytes: []const u8) !u32 {
     var result: u32 = 0;
-    var byte: u8 = undefined;
+    var index: usize = 0;
 
-    while (true) {
-        byte = try reader.readByte();
+    while (index < bytes.len) {
+        const byte = bytes[index];
         result = (result << 7) | (byte & 0x7F);
+        index += 1;
         if (byte & 0x80 == 0) break;
+    }
+
+    if (index == bytes.len and bytes[index - 1] & 0x80 != 0) {
+        return error.IncompleteVariableLengthQuantity;
     }
 
     return result;
@@ -31,10 +36,7 @@ test "readVariableLengthQuantity" {
     };
 
     for (cases) |case| {
-        var fbs = std.io.fixedBufferStream(case.input);
-        const reader = fbs.reader().any();
-        const result = try readVariableLengthQuantity(&reader);
+        const result = try readVariableLengthQuantity(case.input);
         try testing.expectEqual(case.expected, result);
-        // std.debug.print("Test case passed: input = {any}, expected = {}, result = {}\n", .{ case.input, case.expected, result });
     }
 }

@@ -14,7 +14,12 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFile(midi_file_name, .{});
     defer file.close();
 
-    _ = try midi.MidiFile.parse(file);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    _ = try midi.MidiFile.parse(allocator, file);
+
     std.debug.print("MIDI file parsed\n", .{});
 
     // while (reader.readByte()) |b| {

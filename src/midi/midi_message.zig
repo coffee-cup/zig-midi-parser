@@ -164,6 +164,14 @@ pub const MetaEvent = union(enum) {
                 return .{ .key_signature = .{ .key = key, .scale = scale } };
             },
 
+            0x7F => {
+                const data_length = try utils.readVariableLengthQuantity(bytes[2..]);
+                std.debug.print("\nDATA LENGTH: {}\n", .{data_length});
+
+                const data = bytes[3 .. 3 + data_length];
+                return .{ .sequencer_specific = .{ .data = data } };
+            },
+
             else => return error.Unimplemented,
         }
     }
@@ -327,6 +335,16 @@ test "midi meta events" {
         const bytes = [_]u8{ 0xFF, 0x59, 123, 234 };
         const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .key_signature = .{ .key = 123, .scale = 234 } } }, message);
+    }
+
+    // SequencerSpecific
+    {
+        const bytes = [_]u8{ 0xFF, 0x7F, 0x04, 0x00, 0x00, 0x00, 0x00, 0xFF };
+        const message = try MidiEvent.parse(&bytes);
+
+        std.debug.print("SequencerSpecific: {any}\n", .{message.meta_event});
+
+        try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .sequencer_specific = .{ .data = &[_]u8{ 0x00, 0x00, 0x00, 0x00 } } } }, message);
     }
 }
 
