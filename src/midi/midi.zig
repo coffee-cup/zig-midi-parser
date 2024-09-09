@@ -1,4 +1,6 @@
 const std = @import("std");
+const midi_message = @import("midi_message.zig");
+const utils = @import("utils.zig");
 
 pub const HeaderChunk = struct {
     magic: [4]u8,
@@ -52,6 +54,53 @@ pub const HeaderChunk = struct {
     }
 };
 
+pub const TrackChunk = struct {
+    magic: [4]u8,
+    length: u32,
+    // events: []TrackEvent,
+
+    pub fn parse(reader: *const std.io.AnyReader) !TrackChunk {
+        const magic = try reader.readBytesNoEof(4);
+        const length = try reader.readInt(u32, .big);
+
+        const track = TrackChunk{
+            .magic = magic,
+            .length = length,
+        };
+
+        try track.validate();
+
+        return track;
+    }
+
+    pub fn validate(self: TrackChunk) !void {
+        if (!std.mem.eql(u8, &self.magic, "MTrk")) {
+            return error.InvalidMagicNumber;
+        }
+    }
+};
+
+pub const TrackEvent = struct {
+    delta_time: u32,
+    // event: Event,
+
+    pub fn parse(reader: *const std.io.AnyReader) !TrackEvent {
+        const delta_time = try utils.readVariableLengthQuantity(reader);
+        const event = try reader.readByte();
+
+        return TrackEvent{
+            .delta_time = delta_time,
+            .event = event,
+        };
+    }
+};
+
+// pub const Event = union(enum) {
+//     track: TrackEvent,
+//     meta: MetaEvent,
+//     system: SystemEvent,
+// };
+
 pub const MidiFile = struct {
     header: HeaderChunk,
 
@@ -60,6 +109,10 @@ pub const MidiFile = struct {
 
         const header = try HeaderChunk.parse(&reader);
         header.print();
+
+        const bytes = [_]u8{ 0x90, 0x3C, 0x7F };
+        const message = try midi_message.MidiEvent.parse_bytes(&bytes);
+        std.debug.print("MIDI Event: {}\n", .{message});
 
         return MidiFile{ .header = header };
     }
