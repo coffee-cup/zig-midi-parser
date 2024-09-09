@@ -111,9 +111,13 @@ pub const MidiFile = struct {
         header.print();
 
         const bytes = [_]u8{ 0x90, 0x3C, 0x7F };
-        const message = try midi_message.MidiEvent.parse_bytes(&bytes);
+        const message = try midi_message.MidiEvent.parse(&bytes);
         std.debug.print("MIDI Event: {}\n", .{message});
 
         return MidiFile{ .header = header };
     }
 };
+
+test {
+    @import("std").testing.refAllDecls(@This());
+}

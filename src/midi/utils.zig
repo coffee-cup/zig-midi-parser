@@ -14,6 +14,8 @@ pub fn readVariableLengthQuantity(reader: *const std.io.AnyReader) !u32 {
 }
 
 test "readVariableLengthQuantity" {
+    const testing = std.testing;
+
     const TestCase = struct { input: []const u8, expected: u32 };
     const cases = [_]TestCase{
         .{ .input = &[_]u8{0x00}, .expected = 0x00 },
@@ -28,12 +30,11 @@ test "readVariableLengthQuantity" {
         .{ .input = &[_]u8{ 0xFF, 0xFF, 0xFF, 0x7F }, .expected = 0xFFFFFFF },
     };
 
-    // std.debug.print("Running test: readVariableLengthQuantity\n", .{});
     for (cases) |case| {
         var fbs = std.io.fixedBufferStream(case.input);
         const reader = fbs.reader().any();
         const result = try readVariableLengthQuantity(&reader);
-        try std.testing.expectEqual(case.expected, result);
+        try testing.expectEqual(case.expected, result);
         // std.debug.print("Test case passed: input = {any}, expected = {}, result = {}\n", .{ case.input, case.expected, result });
     }
 }

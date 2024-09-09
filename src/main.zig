@@ -1,6 +1,13 @@
 const std = @import("std");
 const midi = @import("midi/midi.zig");
 
+// Ensure all the modules are comptime so they are tested
+comptime {
+    _ = @import("midi/midi.zig");
+    _ = @import("midi/midi_message.zig");
+    _ = @import("midi/utils.zig");
+}
+
 const midi_file_name = "./midi/queen.midi";
 
 pub fn main() !void {

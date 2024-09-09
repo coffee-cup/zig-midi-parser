@@ -15,63 +15,59 @@ pub const MidiEvent = union(enum) {
     pitch_wheel_change: struct { channel: u8, value: u16 },
     meta_event: MetaEvent,
 
-    pub fn parse(reader: *const std.io.AnyReader) !MidiEvent {
-        const status = try reader.readByte();
+    pub fn parse(bytes: []const u8) !MidiEvent {
+        if (bytes.len < 1) return error.InvalidMessage;
+
+        const status = bytes[0];
 
         switch (status & 0xF0) { // Parse the status without the channel
             0x80 => return .{ .note_off = .{
                 .channel = parse_channel(status),
-                .key = try reader.readByte(),
-                .velocity = try reader.readByte(),
+                .key = bytes[1],
+                .velocity = bytes[2],
             } },
 
             0x90 => return .{ .note_on = .{
                 .channel = parse_channel(status),
-                .key = try reader.readByte(),
-                .velocity = try reader.readByte(),
+                .key = bytes[1],
+                .velocity = bytes[2],
             } },
 
             0xA0 => return .{ .note_aftertouch = .{
                 .channel = parse_channel(status),
-                .key = try reader.readByte(),
-                .pressure = try reader.readByte(),
+                .key = bytes[1],
+                .pressure = bytes[2],
             } },
 
             0xB0 => return .{ .controller_change = .{
                 .channel = parse_channel(status),
-                .controller = try reader.readByte(),
-                .value = try reader.readByte(),
+                .controller = bytes[1],
+                .value = bytes[2],
             } },
 
             0xC0 => return .{ .program_change = .{
                 .channel = parse_channel(status),
-                .program = try reader.readByte(),
+                .program = bytes[1],
             } },
 
             0xD0 => return .{ .channel_aftertouch = .{
                 .channel = parse_channel(status),
-                .pressure = try reader.readByte(),
+                .pressure = bytes[1],
             } },
 
             0xE0 => return .{ .pitch_wheel_change = .{
                 .channel = parse_channel(status),
-                .value = (@as(u16, try reader.readByte()) << 7) | try reader.readByte(),
+                .value = (@as(u16, bytes[1]) << 7) | bytes[2],
             } },
 
             else => {},
         }
 
         switch (status) {
-            0xFF => return .{ .meta_event = try MetaEvent.parse(reader) },
+            0xFF => return .{ .meta_event = try MetaEvent.parse(bytes) },
 
             else => return error.Unimplemented,
         }
-    }
-
-    pub fn parse_bytes(bytes: []const u8) !MidiEvent {
-        var fbs = std.io.fixedBufferStream(bytes);
-        const reader = fbs.reader().any();
-        return try MidiEvent.parse(&reader);
     }
 };
 
@@ -92,79 +88,79 @@ pub const MetaEvent = union(enum) {
     key_signature: struct { key: u8, scale: u8 },
     sequencer_specific: struct { data: []const u8 },
 
-    pub fn parse(reader: *const std.io.AnyReader) !MetaEvent {
-        const meta_event_type = try reader.readByte();
+    pub fn parse(bytes: []const u8) !MetaEvent {
+        const meta_event_type = bytes[1];
 
         switch (meta_event_type) {
-            0x00 => return .{ .sequence_number = .{ .number = (@as(u16, try reader.readByte()) << 7) | try reader.readByte() } },
+            0x00 => return .{ .sequence_number = .{ .number = (@as(u16, bytes[2]) << 7) | bytes[3] } },
 
             0x01 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .text = .{ .text = text } };
             },
 
             0x02 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .copyright_notice = .{ .text = text } };
             },
 
             0x03 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .sequence_name = .{ .text = text } };
             },
 
             0x04 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .instrument_name = .{ .text = text } };
             },
 
             0x05 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .lyric = .{ .text = text } };
             },
 
             0x06 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .marker = .{ .text = text } };
             },
 
             0x07 => {
-                const text = parse_text(reader);
+                const text = parse_text(bytes);
                 return .{ .cue_point = .{ .text = text } };
             },
 
             0x20 => {
-                const channel = try reader.readByte();
+                const channel = bytes[2];
                 return .{ .midi_channel_prefix = .{ .channel = channel } };
             },
 
             0x2F => return .{ .end_of_track = {} },
 
             0x51 => {
-                const microseconds_per_quarter_note = (@as(u24, try reader.readByte()) << 16) | (@as(u24, try reader.readByte()) << 8) | try reader.readByte();
+                const microseconds_per_quarter_note = (@as(u24, bytes[2]) << 16) | (@as(u24, bytes[3]) << 8) | bytes[4];
                 return .{ .set_tempo = .{ .microseconds_per_quarter_note = microseconds_per_quarter_note } };
             },
 
             0x54 => {
-                const hour = try reader.readByte();
-                const minute = try reader.readByte();
-                const second = try reader.readByte();
-                const frame = try reader.readByte();
-                const sub_frame = try reader.readByte();
+                const hour = bytes[2];
+                const minute = bytes[3];
+                const second = bytes[4];
+                const frame = bytes[5];
+                const sub_frame = bytes[6];
                 return .{ .smtpe_offset = .{ .hour = hour, .minute = minute, .second = second, .frame = frame, .sub_frame = sub_frame } };
             },
 
             0x58 => {
-                const numerator = try reader.readByte();
-                const denominator = try reader.readByte();
-                const metro = try reader.readByte();
-                const thirty_seconds = try reader.readByte();
+                const numerator = bytes[2];
+                const denominator = bytes[3];
+                const metro = bytes[4];
+                const thirty_seconds = bytes[5];
                 return .{ .time_signature = .{ .numerator = numerator, .denominator = denominator, .metro = metro, .thirty_seconds = thirty_seconds } };
             },
 
             0x59 => {
-                const key = try reader.readByte();
-                const scale = try reader.readByte();
+                const key = bytes[2];
+                const scale = bytes[3];
                 return .{ .key_signature = .{ .key = key, .scale = scale } };
             },
 
@@ -172,61 +168,63 @@ pub const MetaEvent = union(enum) {
         }
     }
 
-    fn parse_text(reader: *const std.io.AnyReader) ![]const u8 {
-        const text_length = try reader.readByte();
-        const text = try reader.readBytesNoEof(text_length);
+    fn parse_text(bytes: []const u8) []const u8 {
+        const text_length = bytes[2];
+        const text = bytes[3 .. 3 + text_length];
         return text;
     }
 };
 
 test "midi channel events" {
+    const testing = std.testing;
+
     // NoteOff
     {
         const bytes = [_]u8{ 0x81, 10, 60 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .note_off = .{ .channel = 1, .key = 10, .velocity = 60 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .note_off = .{ .channel = 1, .key = 10, .velocity = 60 } }, message);
     }
 
     // NoteOn
     {
         const bytes = [_]u8{ 0x9A, 1, 127 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .note_on = .{ .channel = 10, .key = 1, .velocity = 127 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .note_on = .{ .channel = 10, .key = 1, .velocity = 127 } }, message);
     }
 
     // NoteAftertouch
     {
         const bytes = [_]u8{ 0xAF, 10, 60 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .note_aftertouch = .{ .channel = 15, .key = 10, .pressure = 60 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .note_aftertouch = .{ .channel = 15, .key = 10, .pressure = 60 } }, message);
     }
 
     // ControlChange
     {
         const bytes = [_]u8{ 0xB0, 4, 60 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .controller_change = .{ .channel = 0, .controller = 4, .value = 60 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .controller_change = .{ .channel = 0, .controller = 4, .value = 60 } }, message);
     }
 
     // ProgramChange
     {
         const bytes = [_]u8{ 0xC0, 10 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .program_change = .{ .channel = 0, .program = 10 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .program_change = .{ .channel = 0, .program = 10 } }, message);
     }
 
     // ChannelAftertouch
     {
         const bytes = [_]u8{ 0xD0, 125 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .channel_aftertouch = .{ .channel = 0, .pressure = 125 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .channel_aftertouch = .{ .channel = 0, .pressure = 125 } }, message);
     }
 
     // PitchWheelChange
     {
         const bytes = [_]u8{ 0xE0, 125, 125 };
-        const message = try MidiEvent.parse_bytes(&bytes);
-        try std.testing.expectEqual(MidiEvent{ .pitch_wheel_change = .{ .channel = 0, .value = 16125 } }, message);
+        const message = try MidiEvent.parse(&bytes);
+        try testing.expectEqual(MidiEvent{ .pitch_wheel_change = .{ .channel = 0, .value = 16125 } }, message);
     }
 }
 
@@ -236,98 +234,98 @@ test "midi meta events" {
     // SequenceNumber
     {
         const bytes = [_]u8{ 0xFF, 0x00, 125, 125 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqual(MidiEvent{ .meta_event = .{ .sequence_number = .{ .number = 16125 } } }, message);
     }
 
     // Text
     {
         const bytes = [_]u8{ 0xFF, 0x01, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .text = .{ .text = "jake" } } }, message);
     }
 
     // CopyrightNotice
     {
         const bytes = [_]u8{ 0xFF, 0x02, 5, 'h', 'e', 'l', 'l', 'o' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .copyright_notice = .{ .text = "hello" } } }, message);
     }
 
     // SequenceName
     {
         const bytes = [_]u8{ 0xFF, 0x03, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .sequence_name = .{ .text = "jake" } } }, message);
     }
 
     // InstrumentName
     {
         const bytes = [_]u8{ 0xFF, 0x04, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .instrument_name = .{ .text = "jake" } } }, message);
     }
 
     // Lyric
     {
         const bytes = [_]u8{ 0xFF, 0x05, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .lyric = .{ .text = "jake" } } }, message);
     }
 
     // Marker
     {
         const bytes = [_]u8{ 0xFF, 0x06, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .marker = .{ .text = "jake" } } }, message);
     }
 
     // CuePoint
     {
         const bytes = [_]u8{ 0xFF, 0x07, 4, 'j', 'a', 'k', 'e' };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .cue_point = .{ .text = "jake" } } }, message);
     }
 
     // MidiChannelPrefix
     {
         const bytes = [_]u8{ 0xFF, 0x20, 4 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .midi_channel_prefix = .{ .channel = 4 } } }, message);
     }
 
     // EndOfTrack
     {
         const bytes = [_]u8{ 0xFF, 0x2F };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .end_of_track = {} } }, message);
     }
 
     // SetTempo
     {
         const bytes = [_]u8{ 0xFF, 0x51, 0x02, 0x10, 0x00 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .set_tempo = .{ .microseconds_per_quarter_note = 135168 } } }, message);
     }
 
     // SMPTEOffset
     {
         const bytes = [_]u8{ 0xFF, 0x54, 1, 2, 3, 4, 5 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .smtpe_offset = .{ .hour = 1, .minute = 2, .second = 3, .frame = 4, .sub_frame = 5 } } }, message);
     }
 
     // TimeSignature
     {
         const bytes = [_]u8{ 0xFF, 0x58, 123, 234, 242, 12 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .time_signature = .{ .numerator = 123, .denominator = 234, .metro = 242, .thirty_seconds = 12 } } }, message);
     }
 
     // KeySignature
     {
         const bytes = [_]u8{ 0xFF, 0x59, 123, 234 };
-        const message = try MidiEvent.parse_bytes(&bytes);
+        const message = try MidiEvent.parse(&bytes);
         try testing.expectEqualDeep(MidiEvent{ .meta_event = .{ .key_signature = .{ .key = 123, .scale = 234 } } }, message);
     }
 }
