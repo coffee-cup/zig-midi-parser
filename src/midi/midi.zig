@@ -122,13 +122,17 @@ pub const MidiFile = struct {
 
         // Parse the header chunk
         const header = try HeaderChunk.parse(bytes);
-        header.print();
 
         const event_bytes = [_]u8{ 0x90, 0x3C, 0x7F };
         const message = try midi_message.MidiEvent.parse(&event_bytes);
         std.debug.print("MIDI Event: {}\n", .{message});
 
         return MidiFile{ .header = header };
+    }
+
+    pub fn print(self: MidiFile) void {
+        std.debug.print("MidiFile:\n", .{});
+        self.header.print();
     }
 };
 

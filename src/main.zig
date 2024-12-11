@@ -18,9 +18,9 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    _ = try midi.MidiFile.parse(allocator, file);
+    const midi_file = try midi.MidiFile.parse(allocator, file);
 
-    std.debug.print("MIDI file parsed\n", .{});
+    midi_file.print();
 
     // while (reader.readByte()) |b| {
     //     byte = b;
